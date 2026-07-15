@@ -1,0 +1,1379 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+  // Firebase project config (safe to be public — protection comes from database rules)
+  var firebaseConfig = {
+    apiKey: "AIzaSyCpcrZx9m5WE_dyEGisFJD7xIDVVqIeqic",
+    authDomain: "interview-scheduling-96669.firebaseapp.com",
+    databaseURL: "https://interview-scheduling-96669-default-rtdb.firebaseio.com",
+    projectId: "interview-scheduling-96669",
+    storageBucket: "interview-scheduling-96669.firebasestorage.app",
+    messagingSenderId: "299886698307",
+    appId: "1:299886698307:web:92e02670095ee4f22499f6"
+  };
+  if (typeof firebase !== 'undefined') {
+    firebase.initializeApp(firebaseConfig);
+    window.fbdb = firebase.database();
+  } else {
+    // Firebase SDK failed to load (blocked by sandbox, ad blocker, or offline)
+    window.fbdb = null;
+    document.addEventListener('DOMContentLoaded', function () {
+      var banner = document.createElement('div');
+      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:#A5442B;color:#fff;padding:12px 16px;font-family:sans-serif;font-size:14px;text-align:center;';
+      banner.textContent = 'Could not connect to the booking database. This page must be opened as a hosted web page (not inside a preview or with ad blockers on).';
+      document.body.appendChild(banner);
+    });
+  }
+</script>
+
+<style>
+  :root {
+    --paper: #DBF1FA;
+    --paper-raised: #FFFFFF;
+    --ink: #0A2C57;
+    --ink-soft: #4E6B7C;
+    --gold: #FFB627;
+    --gold-deep: #E08A1E;
+    --stone: #A9D6E8;
+    --stone-line: #CBE8F2;
+    --taken: #C7D6DC;
+    --good: #10A5B0;
+    --surface-blue: #6FD3E8;
+    --deep-blue: #0A5AA6;
+  }
+
+  * { box-sizing: border-box; }
+
+  #scheduler-root {
+    font-family: 'IBM Plex Sans', sans-serif;
+    color: var(--ink);
+    padding: 0 0 48px;
+    min-height: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    background:
+      linear-gradient(
+        180deg,
+        #BEEBF9 0%,
+        #8FDCF0 12%,
+        #57C2E4 32%,
+        #2A93CE 58%,
+        #0F63B0 100%
+      );
+  }
+
+  /* Sun rays filtering down through the water */
+  #scheduler-root::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(115deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 22%),
+      linear-gradient(80deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0) 30%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 20px; position: relative; z-index: 1; }
+
+  .header {
+    text-align: center;
+    position: relative;
+    padding: 40px 20px 70px;
+    margin: 0 -20px 8px;
+  }
+
+  /* Layered wave crest at the bottom of the header */
+  .header-waves {
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    width: 100%;
+    height: 60px;
+    display: block;
+    z-index: 1;
+  }
+
+  .header .brand-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--ink);
+    border: 1px solid rgba(255,255,255,0.25);
+    padding: 7px 16px;
+    border-radius: 30px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #fff;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 14px rgba(10, 44, 87, 0.28);
+  }
+  .header .brand-line svg.brand-wave { width: 24px; height: 11px; flex-shrink: 0; color: var(--gold); opacity: 1; }
+  .header .brand-line span { line-height: 1; }
+
+  .brand-logo {
+    display: block;
+    max-width: 240px;
+    max-height: 90px;
+    width: auto;
+    height: auto;
+    margin: 4px auto 16px;
+    /* soft white pad so a transparent logo reads well on the blue header */
+    filter: drop-shadow(0 4px 12px rgba(10, 44, 87, 0.3));
+  }
+
+  .header h1 {
+    color: #fff;
+    text-shadow: 0 2px 12px rgba(10, 44, 87, 0.35);
+    font-size: 40px;
+    margin: 0 0 10px;
+  }
+  .header .sub {
+    color: rgba(255,255,255,0.95);
+    text-shadow: 0 1px 6px rgba(10, 44, 87, 0.25);
+    font-size: 15.5px;
+    max-width: 460px;
+  }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 34px;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    margin: 0 auto 10px;
+  }
+
+  /* Light surface holding interactive content above the deep water */
+  .content-surface {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(3px);
+    border: 1px solid rgba(255,255,255,0.6);
+    border-radius: 16px;
+    padding: 26px 22px 30px;
+    box-shadow: 0 18px 50px rgba(8, 46, 92, 0.28);
+    position: relative;
+    z-index: 2;
+  }
+
+  .wave-divider {
+    display: block;
+    width: 100%;
+    max-width: 300px;
+    height: 18px;
+    margin: 0 auto 26px;
+  }
+  .wave-divider path {
+    stroke: var(--good);
+    stroke-width: 2.5;
+    fill: none;
+  }
+
+  .brand-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gold-deep);
+    margin-bottom: 6px;
+  }
+  .brand-line svg { width: 16px; height: 16px; }
+
+  /* Name gate */
+  .gate {
+    max-width: 380px;
+    margin: 40px auto;
+    background: var(--paper-raised);
+    border: 1px solid var(--stone-line);
+    border-radius: 10px;
+    padding: 28px;
+    text-align: center;
+  }
+  .gate label {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+  }
+  .gate input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 16px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    border: 1.5px solid var(--stone);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--ink);
+    margin-bottom: 14px;
+  }
+  .gate input:focus { outline: none; border-color: var(--gold); }
+
+  .btn {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    border-radius: 6px;
+    padding: 11px 20px;
+    cursor: pointer;
+    background: var(--good);
+    color: #fff;
+    transition: transform 0.12s ease, background 0.15s ease;
+  }
+  .btn:hover { background: #345745; transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { cursor: default; transform: none; }
+
+  .status-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin-bottom: 26px;
+  }
+  .status-line .name-pill {
+    background: var(--paper-raised);
+    border: 1px solid var(--stone-line);
+    padding: 4px 10px;
+    border-radius: 20px;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .status-line button {
+    background: none;
+    border: none;
+    color: var(--gold-deep);
+    text-decoration: underline;
+    cursor: pointer;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 0;
+  }
+
+  .day-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+  }
+
+  .day-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .day-head {
+    text-align: center;
+    padding-bottom: 10px;
+    margin-bottom: 4px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='10' viewBox='0 0 120 10'><path d='M0 5 Q10 0 20 5 T40 5 T60 5 T80 5 T100 5 T120 5' stroke='%230B2A4A' stroke-width='2' fill='none'/></svg>");
+    background-repeat: no-repeat;
+    background-position: bottom center;
+    background-size: 100% 10px;
+  }
+  .day-head .weekday {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gold-deep);
+  }
+  .day-head .date {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 20px;
+    margin-top: 2px;
+  }
+
+  /* Ticket stub */
+  .stub {
+    position: relative;
+    background: var(--paper-raised);
+    border: 1.5px dashed var(--stone);
+    border-radius: 8px;
+    padding: 14px 12px;
+    min-height: 74px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+    overflow: hidden;
+  }
+  .stub::before, .stub::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: radial-gradient(circle at 35% 30%, #FFFFFF, var(--stone) 70%);
+    border-radius: 50%;
+    top: 50%;
+    transform: translateY(-50%);
+    box-shadow: inset 0 0 0 1px var(--stone-line);
+  }
+  .stub::before { left: -8px; }
+  .stub::after { right: -8px; }
+
+  .stub .time {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .stub .tag {
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .stub.available:hover {
+    border-color: var(--good);
+    background: #E4F5F6;
+    transform: translateY(-2px);
+  }
+
+  .stub.taken {
+    cursor: default;
+    border-style: solid;
+    border-color: var(--stone-line);
+    background: var(--taken);
+    opacity: 0.7;
+  }
+  .stub.taken .time { color: var(--ink-soft); }
+  .stub.taken::after {
+    content: "RESERVED";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--ink-soft);
+    transform: rotate(-8deg);
+    border: none;
+    width: auto;
+    height: auto;
+    left: 0;
+    right: 0;
+    top: 0;
+  }
+
+  .stub.mine {
+    cursor: default;
+    border-style: solid;
+    border-color: var(--good);
+    background: #DCF0EF;
+  }
+  .stub.mine .tag { color: var(--good); font-weight: 600; }
+
+  .footer-note {
+    text-align: center;
+    margin-top: 30px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+
+  .live-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--good);
+    margin-right: 6px;
+    animation: pulse 1.8s infinite ease-in-out;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  @media (max-width: 640px) {
+    h1 { font-size: 26px; }
+    .day-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* Booking confirmation screen */
+  #confirm-screen {
+    max-width: 480px;
+    margin: 30px auto;
+    background: var(--paper-raised);
+    border: 1px solid var(--stone-line);
+    border-radius: 12px;
+    padding: 36px 30px;
+    text-align: center;
+  }
+  .confirm-badge {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 18px;
+    border-radius: 50%;
+    background: #DCF0EF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .confirm-badge svg { width: 32px; height: 32px; stroke: var(--good); }
+  #confirm-screen h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 26px;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  #confirm-screen .confirm-name {
+    color: var(--ink-soft);
+    font-size: 14px;
+    margin: 0 0 22px;
+  }
+  .confirm-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+  .confirm-slot {
+    border: 1.5px solid var(--good);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: #F3FAFA;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .confirm-slot .cal-icon {
+    width: 34px; height: 34px;
+    flex-shrink: 0;
+    border-radius: 7px;
+    background: var(--good);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .confirm-slot .cal-icon svg { width: 18px; height: 18px; stroke: #fff; }
+  .confirm-slot .slot-date {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--ink);
+  }
+  .confirm-slot .slot-time {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .confirm-slot .slot-info { flex: 1; }
+  .add-cal-btn {
+    flex-shrink: 0;
+    background: #fff;
+    border: 1.5px solid var(--good);
+    color: var(--good);
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .add-cal-btn:hover { background: #E4F5F6; }
+  .confirm-note {
+    background: #FBF3E2;
+    border: 1px solid #EBD9AE;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: #6B531A;
+    margin-bottom: 22px;
+    line-height: 1.45;
+  }
+  .confirm-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* Organizer link + admin */
+  .org-link-row {
+    text-align: center;
+    margin-top: 14px;
+  }
+  .org-link-row button {
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(27, 36, 32, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 20px;
+  }
+  .modal-card {
+    background: var(--paper-raised);
+    border: 1px solid var(--stone-line);
+    border-radius: 10px;
+    padding: 26px;
+    max-width: 320px;
+    width: 100%;
+    text-align: center;
+  }
+  .modal-card label {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+  }
+  .modal-card input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 15px;
+    border: 1.5px solid var(--stone);
+    border-radius: 6px;
+    margin-bottom: 12px;
+  }
+  .modal-card input:focus { outline: none; border-color: var(--gold); }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .modal-actions .btn { flex: 1; }
+  .btn-secondary {
+    background: transparent;
+    color: var(--ink-soft);
+    border: 1.5px solid var(--stone);
+  }
+  .btn-secondary:hover { background: var(--paper); }
+  .modal-error {
+    color: #A5442B;
+    font-size: 12px;
+    margin: -6px 0 12px;
+    min-height: 14px;
+  }
+
+  #admin-panel {
+    max-width: 880px;
+    margin: 20px auto 0;
+    background: var(--paper-raised);
+    border: 1px solid var(--stone-line);
+    border-radius: 10px;
+    padding: 24px;
+  }
+  .admin-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .admin-head h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    margin: 0;
+  }
+  .admin-head .count {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .admin-actions { display: flex; gap: 8px; }
+  .admin-actions .btn { padding: 8px 14px; font-size: 13px; }
+
+  table.roster {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  table.roster th {
+    text-align: left;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    border-bottom: 2px solid var(--ink);
+    padding: 8px 10px;
+  }
+  table.roster td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--stone-line);
+  }
+  table.roster tr:last-child td { border-bottom: none; }
+  table.roster .empty-cell { color: var(--ink-soft); font-style: italic; }
+  table.roster .clear-btn {
+    background: none;
+    border: none;
+    color: var(--gold-deep);
+    text-decoration: underline;
+    cursor: pointer;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+  }
+
+  /* Can't make it box */
+  .cant-make-it {
+    max-width: 560px;
+    margin: 30px auto 0;
+    background: var(--paper-raised);
+    border: 1.5px dashed var(--stone);
+    border-radius: 10px;
+    padding: 20px 22px;
+    text-align: center;
+  }
+  .cant-make-it h3 {
+    font-family: 'Fraunces', serif;
+    font-size: 17px;
+    margin: 0 0 6px;
+  }
+  .cant-make-it p {
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    margin: 0 0 14px;
+  }
+  .cant-make-it textarea {
+    width: 100%;
+    min-height: 64px;
+    padding: 10px 12px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    border: 1.5px solid var(--stone);
+    border-radius: 6px;
+    resize: vertical;
+    margin-bottom: 12px;
+  }
+  .cant-make-it textarea:focus { outline: none; border-color: var(--good); }
+  .cant-make-it .btn-secondary {
+    padding: 10px 18px;
+    font-size: 13.5px;
+  }
+  .cant-make-it .confirm-msg {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--good);
+    margin-top: 10px;
+    display: none;
+  }
+
+  #admin-unavailable {
+    max-width: 880px;
+    margin: 18px auto 0;
+    background: var(--paper-raised);
+    border: 1px solid var(--stone-line);
+    border-radius: 10px;
+    padding: 24px;
+  }
+  #admin-unavailable h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    margin: 0 0 14px;
+  }
+  table.roster .note-cell {
+    color: var(--ink-soft);
+    font-size: 13px;
+    max-width: 320px;
+  }
+</style>
+
+<div id="scheduler-root">
+  <div class="wrap">
+    <div class="header">
+      <div class="brand-line">
+        <svg class="brand-wave" viewBox="0 0 28 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 6c2.5 0 2.5-4 5-4s2.5 4 5 4 2.5-4 5-4 2.5 4 5 4 2.5-4 5-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span>SeaWorld Orlando &middot; Interview Scheduling</span>
+        <svg class="brand-wave" viewBox="0 0 28 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 6c2.5 0 2.5-4 5-4s2.5 4 5 4 2.5-4 5-4 2.5 4 5 4 2.5-4 5-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </div>
+
+      <!-- ===== LOGO SLOT: paste your base64 string between the quotes in src="" below (replace PASTE_LOGO_HERE) ===== -->
+      <img id="brand-logo" class="brand-logo" src="PASTE_LOGO_HERE" alt="SeaWorld Orlando"
+           onerror="this.style.display='none'" />
+      <!-- ===== END LOGO SLOT ===== -->
+
+      <h1>Pick your interview slot</h1>
+      <p class="sub">Choose an open time below. Once you book, it's reserved — everyone else will see it gray out.</p>
+
+      <svg class="header-waves" viewBox="0 0 1440 60" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 30 C 120 55, 240 5, 360 25 S 600 55, 720 30 S 960 5, 1080 28 S 1320 55, 1440 30 L1440 60 L0 60 Z" fill="rgba(255,255,255,0.28)"/>
+        <path d="M0 38 C 120 60, 240 18, 360 34 S 600 60, 720 38 S 960 16, 1080 36 S 1320 60, 1440 38 L1440 60 L0 60 Z" fill="rgba(255,255,255,0.55)"/>
+        <path d="M0 46 C 160 64, 300 30, 480 44 S 800 66, 960 46 S 1200 30, 1440 46 L1440 61 L0 61 Z" fill="#DBF1FA"/>
+      </svg>
+    </div>
+
+    <div class="content-surface">
+
+    <div id="gate" class="gate">
+      <label for="name-input">Your full name</label>
+      <input id="name-input" type="text" placeholder="Type your full name" autocomplete="name" maxlength="60" />
+      <button class="btn" id="continue-btn" style="width:100%;">Continue</button>
+    </div>
+
+    <div id="app" style="display:none;">
+      <div class="status-line">
+        <span>Booking as <span class="name-pill" id="name-pill"></span></span>
+        <span id="booking-count-line"></span>
+        <button id="switch-name">not you?</button>
+      </div>
+      <div id="grid" class="day-grid"></div>
+      <div class="footer-note"><span class="live-dot"></span>updates automatically — no need to refresh</div>
+
+      <div class="cant-make-it">
+        <h3>Can't make any of these times?</h3>
+        <p>Let us know and share what does work — we'll follow up to find another time.</p>
+        <textarea id="unavailable-note" placeholder="e.g. I'm only free the week of August 10th, mornings preferred"></textarea>
+        <button class="btn btn-secondary" id="unavailable-submit">Submit</button>
+        <div class="confirm-msg" id="unavailable-confirm">Thanks — we'll be in touch to find a time.</div>
+      </div>
+
+      <div class="org-link-row"><button id="org-link">Organizer view</button></div>
+    </div>
+
+    <div id="confirm-screen" style="display:none;">
+      <div class="confirm-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <h2>You're booked!</h2>
+      <p class="confirm-name" id="confirm-name"></p>
+      <div class="confirm-slots" id="confirm-slots"></div>
+      <div class="confirm-note">
+        Tap "Add to calendar" on your slot above so you don't miss it — you won't get an automatic reminder. We'll follow up with interview details.
+      </div>
+      <div class="confirm-actions" id="confirm-actions"></div>
+    </div>
+
+    <div id="admin-panel" style="display:none;">
+      <div class="admin-head">
+        <h2>Roster</h2>
+        <div class="admin-actions">
+          <span class="count" id="admin-count"></span>
+          <button class="btn" id="export-csv">Download CSV</button>
+          <button class="btn btn-secondary" id="close-admin">Close</button>
+        </div>
+      </div>
+      <table class="roster">
+        <thead>
+          <tr><th>Date</th><th>Time</th><th>Candidate</th><th></th></tr>
+        </thead>
+        <tbody id="admin-body"></tbody>
+      </table>
+    </div>
+
+    <div id="admin-unavailable" style="display:none;">
+      <h2>Can't make any time slot</h2>
+      <table class="roster">
+        <thead>
+          <tr><th>Candidate</th><th>Note</th><th></th></tr>
+        </thead>
+        <tbody id="admin-unavailable-body"></tbody>
+      </table>
+    </div>
+  </div>
+  </div>
+</div>
+
+<div id="msg-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <p id="msg-modal-text" style="font-size:14.5px; line-height:1.5; margin:0 0 16px; color:var(--ink);"></p>
+    <div class="modal-actions" id="msg-modal-actions">
+      <button class="btn btn-secondary" id="msg-modal-cancel" style="display:none;">Cancel</button>
+      <button class="btn" id="msg-modal-ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="admin-gate" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <label for="admin-pass">Organizer passcode</label>
+    <input id="admin-pass" type="password" autocomplete="off" />
+    <div class="modal-error" id="admin-error"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="admin-cancel">Cancel</button>
+      <button class="btn" id="admin-submit">View roster</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const DAYS = ['2026-07-27', '2026-07-29', '2026-08-03', '2026-08-05', '2026-08-07'];
+  const SLOTS = [
+    { key: '12', label: '12:00 PM', tag: '12:00 – 12:45 PM ET', startHour: 12, startMin: 0, endHour: 12, endMin: 45 },
+    { key: '1',  label: '1:00 PM',  tag: '1:00 – 1:45 PM ET',   startHour: 13, startMin: 0, endHour: 13, endMin: 45 },
+    { key: '2',  label: '2:00 PM',  tag: '2:00 – 2:45 PM ET',   startHour: 14, startMin: 0, endHour: 14, endMin: 45 }
+  ];
+  const MAX_BOOKINGS_PER_CANDIDATE = 2;
+  const MIN_NAME_LENGTH = 2;
+  const MAX_NAME_LENGTH = 60;
+
+  let myName = '';
+  let bookings = {};
+  let pollHandle = null;
+
+  const gate = document.getElementById('gate');
+  const app = document.getElementById('app');
+  const nameInput = document.getElementById('name-input');
+  const continueBtn = document.getElementById('continue-btn');
+  const namePill = document.getElementById('name-pill');
+  const switchNameBtn = document.getElementById('switch-name');
+  const grid = document.getElementById('grid');
+  const bookingCountLine = document.getElementById('booking-count-line');
+
+  const ADMIN_PASS = 'Interview!';
+  const orgLink = document.getElementById('org-link');
+  const adminGate = document.getElementById('admin-gate');
+  const adminPass = document.getElementById('admin-pass');
+  const adminError = document.getElementById('admin-error');
+  const adminSubmit = document.getElementById('admin-submit');
+  const adminCancel = document.getElementById('admin-cancel');
+  const adminPanel = document.getElementById('admin-panel');
+  const adminBody = document.getElementById('admin-body');
+  const adminCount = document.getElementById('admin-count');
+  const closeAdmin = document.getElementById('close-admin');
+  const exportCsvBtn = document.getElementById('export-csv');
+
+  const unavailableNote = document.getElementById('unavailable-note');
+  const unavailableSubmit = document.getElementById('unavailable-submit');
+  const unavailableConfirm = document.getElementById('unavailable-confirm');
+  const adminUnavailable = document.getElementById('admin-unavailable');
+  const adminUnavailableBody = document.getElementById('admin-unavailable-body');
+
+  const confirmScreen = document.getElementById('confirm-screen');
+  const confirmName = document.getElementById('confirm-name');
+  const confirmSlots = document.getElementById('confirm-slots');
+  const confirmActions = document.getElementById('confirm-actions');
+
+  const msgModal = document.getElementById('msg-modal');
+  const msgModalText = document.getElementById('msg-modal-text');
+  const msgModalOk = document.getElementById('msg-modal-ok');
+  const msgModalCancel = document.getElementById('msg-modal-cancel');
+
+  function showAlert(message) {
+    return new Promise(resolve => {
+      msgModalText.textContent = message;
+      msgModalCancel.style.display = 'none';
+      msgModalOk.textContent = 'OK';
+      msgModal.style.display = 'flex';
+      msgModalOk.onclick = () => { msgModal.style.display = 'none'; resolve(); };
+    });
+  }
+
+  function showConfirm(message) {
+    return new Promise(resolve => {
+      msgModalText.textContent = message;
+      msgModalCancel.style.display = 'inline-block';
+      msgModalOk.textContent = 'Yes, cancel it';
+      msgModal.style.display = 'flex';
+      msgModalOk.onclick = () => { msgModal.style.display = 'none'; resolve(true); };
+      msgModalCancel.onclick = () => { msgModal.style.display = 'none'; resolve(false); };
+    });
+  }
+
+  function weekdayLabel(dateStr) {
+    const d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+  }
+  function dateLabel(dateStr) {
+    const d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  async function loadBookings() {
+    if (!window.fbdb) { bookings = {}; return; }
+    try {
+      const snap = await window.fbdb.ref('bookings').get();
+      bookings = snap.exists() ? (snap.val() || {}) : {};
+    } catch (e) {
+      bookings = {};
+    }
+  }
+
+  async function saveBookings() {
+    await window.fbdb.ref('bookings').set(bookings);
+  }
+
+  function render() {
+    bookingCountLine.textContent = `${myBookingCount()}/${MAX_BOOKINGS_PER_CANDIDATE} slots booked`;
+    grid.innerHTML = '';
+    DAYS.forEach(date => {
+      const col = document.createElement('div');
+      col.className = 'day-col';
+
+      const head = document.createElement('div');
+      head.className = 'day-head';
+      head.innerHTML = `<div class="weekday">${weekdayLabel(date)}</div><div class="date">${dateLabel(date)}</div>`;
+      col.appendChild(head);
+
+      SLOTS.forEach(slot => {
+        const id = date + '_' + slot.key;
+        const takenBy = bookings[id];
+        const stub = document.createElement('div');
+
+        if (takenBy && takenBy.toLowerCase() === myName.toLowerCase()) {
+          stub.className = 'stub mine';
+          stub.innerHTML = `<div class="time">${slot.label}</div><div class="tag">Your interview</div>`;
+          stub.onclick = () => cancelBooking(id);
+        } else if (takenBy) {
+          stub.className = 'stub taken';
+          stub.innerHTML = `<div class="time">${slot.label}</div><div class="tag">Reserved</div>`;
+        } else {
+          stub.className = 'stub available';
+          stub.innerHTML = `<div class="time">${slot.label}</div><div class="tag">Available</div>`;
+          stub.onclick = () => bookSlot(id, slot);
+        }
+        col.appendChild(stub);
+      });
+
+      grid.appendChild(col);
+    });
+  }
+
+  function myBookingCount() {
+    return Object.values(bookings).filter(v => v.toLowerCase() === myName.toLowerCase()).length;
+  }
+
+  async function bookSlot(id, slot) {
+    await loadBookings();
+    if (bookings[id]) {
+      render();
+      await showAlert('Sorry — someone just took that slot. Please pick another.');
+      return;
+    }
+    if (myBookingCount() >= MAX_BOOKINGS_PER_CANDIDATE) {
+      await showAlert(`You've already booked ${MAX_BOOKINGS_PER_CANDIDATE} slots, which is the max per candidate. Cancel one first if you want to switch.`);
+      return;
+    }
+    bookings[id] = myName;
+    await saveBookings();
+    render();
+    showConfirmScreen(id);
+  }
+
+  // Build a readable {dateFull, timeFull} for a slot id like '2026-07-27_12'
+  function describeSlot(id) {
+    const [date, key] = id.split('_');
+    const slot = SLOTS.find(s => s.key === key);
+    const d = new Date(date + 'T12:00:00');
+    const dateFull = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    return { dateFull, timeFull: slot ? slot.tag : '' };
+  }
+
+  function mySlotIds() {
+    return Object.keys(bookings).filter(id => bookings[id].toLowerCase() === myName.toLowerCase());
+  }
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  // Build an .ics file for a single slot, anchored to America/New_York
+  function buildIcs(id) {
+    const [date, key] = id.split('_');
+    const slot = SLOTS.find(s => s.key === key);
+    if (!slot) return null;
+    const [y, m, d] = date.split('-');
+    const dtStart = `${y}${m}${d}T${pad(slot.startHour)}${pad(slot.startMin)}00`;
+    const dtEnd = `${y}${m}${d}T${pad(slot.endHour)}${pad(slot.endMin)}00`;
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    const uid = `${id}-${Date.now()}@seaworld-interview`;
+
+    // VTIMEZONE for America/New_York (covers EST/EDT transitions)
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//SeaWorld Orlando//Interview Scheduler//EN',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      'BEGIN:VTIMEZONE',
+      'TZID:America/New_York',
+      'BEGIN:DAYLIGHT',
+      'TZOFFSETFROM:-0500',
+      'TZOFFSETTO:-0400',
+      'TZNAME:EDT',
+      'DTSTART:19700308T020000',
+      'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
+      'END:DAYLIGHT',
+      'BEGIN:STANDARD',
+      'TZOFFSETFROM:-0400',
+      'TZOFFSETTO:-0500',
+      'TZNAME:EST',
+      'DTSTART:19701101T020000',
+      'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
+      'END:STANDARD',
+      'END:VTIMEZONE',
+      'BEGIN:VEVENT',
+      `UID:${uid}`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;TZID=America/New_York:${dtStart}`,
+      `DTEND;TZID=America/New_York:${dtEnd}`,
+      'SUMMARY:Interview — SeaWorld Orlando',
+      `DESCRIPTION:Interview for ${myName.replace(/[,;\\]/g, ' ')}. SeaWorld Orlando will follow up with details.`,
+      'STATUS:CONFIRMED',
+      'BEGIN:VALARM',
+      'TRIGGER:-P1D',
+      'ACTION:DISPLAY',
+      'DESCRIPTION:Interview tomorrow — SeaWorld Orlando',
+      'END:VALARM',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ];
+    return lines.join('\r\n');
+  }
+
+  function downloadIcs(id) {
+    const ics = buildIcs(id);
+    if (!ics) return;
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const [date] = id.split('_');
+    a.download = `seaworld-interview-${date}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function showConfirmScreen(justBookedId) {
+    const ids = mySlotIds();
+    confirmName.textContent = `Confirmed for ${myName}`;
+    confirmSlots.innerHTML = '';
+    ids.forEach(id => {
+      const { dateFull, timeFull } = describeSlot(id);
+      const row = document.createElement('div');
+      row.className = 'confirm-slot';
+      row.innerHTML = `
+        <div class="cal-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        </div>
+        <div class="slot-info">
+          <div class="slot-date">${dateFull}</div>
+          <div class="slot-time">${timeFull}</div>
+        </div>`;
+      const addBtn = document.createElement('button');
+      addBtn.className = 'add-cal-btn';
+      addBtn.textContent = 'Add to calendar';
+      addBtn.onclick = () => downloadIcs(id);
+      row.appendChild(addBtn);
+      confirmSlots.appendChild(row);
+    });
+
+    confirmActions.innerHTML = '';
+    const remaining = MAX_BOOKINGS_PER_CANDIDATE - ids.length;
+    if (remaining > 0) {
+      const another = document.createElement('button');
+      another.className = 'btn btn-secondary';
+      another.textContent = remaining === 1 ? 'Book one more slot' : 'Book another slot';
+      another.onclick = () => {
+        confirmScreen.style.display = 'none';
+        app.style.display = 'block';
+        render();
+      };
+      confirmActions.appendChild(another);
+    }
+    const done = document.createElement('button');
+    done.className = 'btn';
+    done.textContent = 'Done';
+    done.onclick = () => {
+      confirmScreen.style.display = 'none';
+      app.style.display = 'block';
+      render();
+    };
+    confirmActions.appendChild(done);
+
+    // "Booked the wrong time?" undo link for the slot they just clicked
+    let undoRow = document.getElementById('confirm-undo-row');
+    if (undoRow) undoRow.remove();
+    if (justBookedId) {
+      undoRow = document.createElement('div');
+      undoRow.id = 'confirm-undo-row';
+      undoRow.style.cssText = 'margin-top:16px; font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft);';
+      const undoBtn = document.createElement('button');
+      undoBtn.textContent = 'Booked the wrong time? Undo';
+      undoBtn.style.cssText = 'background:none; border:none; color:var(--gold-deep); text-decoration:underline; cursor:pointer; font-family:inherit; font-size:12px;';
+      undoBtn.onclick = async () => {
+        await loadBookings();
+        if (bookings[justBookedId] && bookings[justBookedId].toLowerCase() === myName.toLowerCase()) {
+          delete bookings[justBookedId];
+          await saveBookings();
+        }
+        confirmScreen.style.display = 'none';
+        app.style.display = 'block';
+        render();
+      };
+      undoRow.appendChild(undoBtn);
+      confirmActions.parentNode.appendChild(undoRow);
+    }
+
+    app.style.display = 'none';
+    confirmScreen.style.display = 'block';
+    if (typeof scrollTo === 'function') { try { scrollTo(0, 0); } catch (e) {} }
+  }
+
+  async function cancelBooking(id) {
+    const ok = await showConfirm('Cancel your interview slot?');
+    if (!ok) return;
+    await loadBookings();
+    if (bookings[id] && bookings[id].toLowerCase() === myName.toLowerCase()) {
+      delete bookings[id];
+      await saveBookings();
+    }
+    render();
+  }
+
+  async function loadUnavailable() {
+    try {
+      const snap = await window.fbdb.ref('unavailable').get();
+      return snap.exists() ? (snap.val() || []) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async function saveUnavailable(list) {
+    await window.fbdb.ref('unavailable').set(list);
+  }
+
+  unavailableSubmit.onclick = async () => {
+    const note = unavailableNote.value.trim();
+    const list = await loadUnavailable();
+    const existingIdx = list.findIndex(e => e.name.toLowerCase() === myName.toLowerCase());
+    const entry = { name: myName, note: note, submittedAt: new Date().toISOString() };
+    if (existingIdx > -1) {
+      list[existingIdx] = entry;
+    } else {
+      list.push(entry);
+    }
+    await saveUnavailable(list);
+    unavailableConfirm.style.display = 'block';
+    unavailableSubmit.disabled = true;
+    setTimeout(() => { unavailableSubmit.disabled = false; }, 1500);
+  };
+
+  continueBtn.onclick = async () => {
+    // collapse pasted line breaks/extra spaces, then trim
+    const val = nameInput.value.replace(/\s+/g, ' ').trim();
+    if (val.length < MIN_NAME_LENGTH) {
+      await showAlert(`Please enter your full name (at least ${MIN_NAME_LENGTH} characters).`);
+      nameInput.focus();
+      return;
+    }
+    if (val.length > MAX_NAME_LENGTH) {
+      await showAlert(`That name is too long — please keep it under ${MAX_NAME_LENGTH} characters.`);
+      nameInput.focus();
+      return;
+    }
+    myName = val;
+    namePill.textContent = myName;
+    gate.style.display = 'none';
+    app.style.display = 'block';
+    render();              // draw the slot grid immediately from static data
+    await loadBookings();  // then layer in any existing bookings
+    render();
+    startLiveSync();
+  };
+
+  // Live updates: Firebase pushes changes to every open page instantly
+  function startLiveSync() {
+    if (!window.fbdb || pollHandle) return; // no db, or already listening
+    pollHandle = window.fbdb.ref('bookings').on('value', (snap) => {
+      bookings = snap.exists() ? (snap.val() || {}) : {};
+      // Only re-render the grid if the candidate is currently looking at it
+      if (app.style.display !== 'none') render();
+    });
+  }
+  function stopLiveSync() {
+    if (window.fbdb && pollHandle) {
+      window.fbdb.ref('bookings').off('value', pollHandle);
+    }
+    pollHandle = null;
+  }
+
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') continueBtn.click();
+  });
+
+  switchNameBtn.onclick = () => {
+    app.style.display = 'none';
+    gate.style.display = 'block';
+    nameInput.value = '';
+    nameInput.focus();
+    stopLiveSync();
+  };
+
+  // --- Organizer / admin view ---
+  function allSlotsFlat() {
+    const rows = [];
+    DAYS.forEach(date => {
+      SLOTS.forEach(slot => {
+        const id = date + '_' + slot.key;
+        rows.push({
+          id,
+          dateLabel: `${weekdayLabel(date)} ${dateLabel(date)}`,
+          timeLabel: slot.tag,
+          name: bookings[id] || ''
+        });
+      });
+    });
+    return rows;
+  }
+
+  async function renderAdmin() {
+    await loadBookings();
+    const rows = allSlotsFlat();
+    const bookedCount = rows.filter(r => r.name).length;
+    adminCount.textContent = `${bookedCount} of ${rows.length} slots booked`;
+    adminBody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      const nameCell = r.name
+        ? `<td>${r.name}</td>`
+        : `<td class="empty-cell">— open —</td>`;
+      const actionCell = r.name
+        ? `<td><button class="clear-btn" data-id="${r.id}">clear</button></td>`
+        : `<td></td>`;
+      tr.innerHTML = `<td>${r.dateLabel}</td><td>${r.timeLabel}</td>${nameCell}${actionCell}`;
+      adminBody.appendChild(tr);
+    });
+    adminBody.querySelectorAll('.clear-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.getAttribute('data-id');
+        await loadBookings();
+        delete bookings[id];
+        await saveBookings();
+        renderAdmin();
+        render();
+      };
+    });
+  }
+
+  async function renderAdminUnavailable() {
+    const list = await loadUnavailable();
+    adminUnavailableBody.innerHTML = '';
+    if (list.length === 0) {
+      adminUnavailableBody.innerHTML = '<tr><td colspan="3" class="empty-cell">No one has reported a conflict yet</td></tr>';
+      return;
+    }
+    list.forEach((entry, idx) => {
+      const tr = document.createElement('tr');
+      const noteText = entry.note ? entry.note : '<span class="empty-cell">(no note)</span>';
+      tr.innerHTML = `<td>${entry.name}</td><td class="note-cell">${noteText}</td><td><button class="clear-btn" data-idx="${idx}">remove</button></td>`;
+      adminUnavailableBody.appendChild(tr);
+    });
+    adminUnavailableBody.querySelectorAll('.clear-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const idx = parseInt(btn.getAttribute('data-idx'), 10);
+        const current = await loadUnavailable();
+        current.splice(idx, 1);
+        await saveUnavailable(current);
+        renderAdminUnavailable();
+      };
+    });
+  }
+
+  async function exportCsv() {
+    const rows = allSlotsFlat();
+    let csv = 'Date,Time,Candidate\n';
+    rows.forEach(r => {
+      const name = r.name ? `"${r.name.replace(/"/g, '""')}"` : '';
+      csv += `"${r.dateLabel}","${r.timeLabel}",${name}\n`;
+    });
+    downloadCsv(csv, 'interview-roster.csv');
+
+    const unavailable = await loadUnavailable();
+    if (unavailable.length > 0) {
+      let csv2 = 'Candidate,Note\n';
+      unavailable.forEach(e => {
+        const note = e.note ? `"${e.note.replace(/"/g, '""')}"` : '';
+        csv2 += `"${e.name.replace(/"/g, '""')}",${note}\n`;
+      });
+      downloadCsv(csv2, 'interview-unavailable.csv');
+    }
+  }
+
+  function downloadCsv(csv, filename) {
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  orgLink.onclick = () => {
+    adminError.textContent = '';
+    adminPass.value = '';
+    adminGate.style.display = 'flex';
+    adminPass.focus();
+  };
+
+  adminCancel.onclick = () => { adminGate.style.display = 'none'; };
+
+  adminSubmit.onclick = async () => {
+    if (adminPass.value === ADMIN_PASS) {
+      adminGate.style.display = 'none';
+      app.style.display = 'none';
+      adminPanel.style.display = 'block';
+      adminUnavailable.style.display = 'block';
+      await renderAdmin();
+      await renderAdminUnavailable();
+    } else {
+      adminError.textContent = 'Incorrect passcode.';
+    }
+  };
+
+  adminPass.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') adminSubmit.click();
+  });
+
+  closeAdmin.onclick = () => {
+    adminPanel.style.display = 'none';
+    adminUnavailable.style.display = 'none';
+    app.style.display = 'block';
+    render();
+  };
+
+  exportCsvBtn.onclick = exportCsv;
+})();
+</script>
