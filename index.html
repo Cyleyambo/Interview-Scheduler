@@ -983,7 +983,14 @@
       return;
     }
     bookings[id] = myName;
-    await saveBookings();
+    try {
+      await saveBookings();
+    } catch (e) {
+      delete bookings[id]; // roll back the local change since the save failed
+      render();
+      await showAlert('Could not save your booking — please try again in a moment. If this keeps happening, contact us.');
+      return;
+    }
     render();
     showConfirmScreen(id);
   }
