@@ -967,8 +967,24 @@
     return Object.values(bookings).filter(v => v.toLowerCase() === myName.toLowerCase()).length;
   }
 
+  // TEMPORARY DIAGNOSTIC — shows a banner tracing each booking step
+  function diag(msg) {
+    let d = document.getElementById('diag-banner');
+    if (!d) {
+      d = document.createElement('div');
+      d.id = 'diag-banner';
+      d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#0A2C57;color:#fff;padding:8px 12px;font-family:monospace;font-size:12px;text-align:center;';
+      document.body.appendChild(d);
+    }
+    d.textContent = 'DIAG: ' + msg;
+  }
+
   async function bookSlot(id, slot) {
+    diag('tapped ' + id + ' | fbdb=' + (window.fbdb ? 'connected' : 'NULL'));
+    if (!window.fbdb) { await showAlert('Not connected to the database. Refresh the page.'); return; }
+    diag('loading current bookings...');
     await loadBookings();
+    diag('loaded. checking slot...');
     if (bookings[id]) {
       render();
       await showAlert('Sorry — someone just took that slot. Please pick another.');
@@ -979,9 +995,12 @@
       return;
     }
     bookings[id] = myName;
+    diag('saving to firebase...');
     try {
       await saveBookings();
+      diag('SAVED OK');
     } catch (e) {
+      diag('SAVE FAILED: ' + (e && e.message ? e.message : e));
       delete bookings[id]; // roll back the local change since the save failed
       render();
       await showAlert('Could not save your booking — please try again in a moment. If this keeps happening, contact us.');
