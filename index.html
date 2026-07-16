@@ -916,9 +916,12 @@
   async function loadBookings() {
     if (!window.fbdb) { bookings = {}; return; }
     try {
-      const snap = await window.fbdb.ref('bookings').get();
+      const readPromise = window.fbdb.ref('bookings').get();
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('read timed out after 8s')), 8000));
+      const snap = await Promise.race([readPromise, timeout]);
       bookings = snap.exists() ? (snap.val() || {}) : {};
     } catch (e) {
+      diag('READ FAILED: ' + (e && e.message ? e.message : e));
       bookings = {};
     }
   }
