@@ -764,7 +764,7 @@
         <button id="switch-name">not you?</button>
       </div>
       <div id="grid" class="day-grid"></div>
-      <div class="footer-note"><span class="live-dot"></span>updates automatically — no need to refresh</div>
+      <div class="footer-note"><span class="live-dot"></span>updates automatically — no need to refresh &nbsp;·&nbsp; <span id="version-stamp">v9</span></div>
 
       <div class="cant-make-it">
         <h3>Can't make any of these times?</h3>
@@ -934,14 +934,11 @@
       const readPromise = window.fbdb.ref('bookings').get();
       const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('read timed out after 8s')), 8000));
       const snap = await Promise.race([readPromise, timeout]);
-      bookings = snap.exists() ? (snap.val() || {}) : {};
+      const v = snap.exists() ? snap.val() : null;
+      bookings = (v && typeof v === 'object') ? v : {};
     } catch (e) {
       bookings = {};
     }
-  }
-
-  async function saveBookings() {
-    await window.fbdb.ref('bookings').set(bookings);
   }
 
   function render() {
@@ -960,8 +957,9 @@
         const id = date + '_' + slot.key;
         const takenBy = bookings[id];
         const stub = document.createElement('div');
+        stub.setAttribute('data-slot-id', id);
 
-        if (takenBy && takenBy.toLowerCase() === myName.toLowerCase()) {
+        if (takenBy && String(takenBy).toLowerCase() === myName.toLowerCase()) {
           stub.className = 'stub mine';
           stub.innerHTML = `<div class="time">${slot.label}</div><div class="tag">Your interview</div>`;
           stub.onclick = () => cancelBooking(id);
@@ -981,12 +979,12 @@
   }
 
   function myBookingCount() {
-    return Object.values(bookings).filter(v => v.toLowerCase() === myName.toLowerCase()).length;
+    return Object.values(bookings).filter(v => String(v || '').toLowerCase() === myName.toLowerCase()).length;
   }
 
   async function bookSlot(id, slot) {
     if (!window.fbdb) { await showAlert('Not connected to the database. Please refresh the page.'); return; }
-    await loadBookings();
+    // The live listener keeps `bookings` current, so no slow extra read is needed here.
     if (bookings[id]) {
       render();
       await showAlert('Sorry — someone just took that slot. Please pick another.');
@@ -996,17 +994,56 @@
       await showAlert(`You've already booked ${MAX_BOOKINGS_PER_CANDIDATE} slots, which is the max per candidate. Cancel one first if you want to switch.`);
       return;
     }
-    bookings[id] = myName;
+
+    setSlotBusy(id, true);   // immediate "Booking…" feedback
     try {
-      await saveBookings();
+      // Atomically claim just this one slot — only succeeds if it's still empty.
+      const result = await window.fbdb.ref('bookings/' + id).transaction((current) => {
+        if (current === null) return myName;
+        return; // abort: someone else already has it
+      });
+      setSlotBusy(id, false);
+      if (!result.committed) {
+        await loadBookings();
+        render();
+        await showAlert('Sorry — someone just took that slot. Please pick another.');
+        return;
+      }
     } catch (e) {
-      delete bookings[id]; // roll back the local change since the save failed
+      setSlotBusy(id, false);
       render();
       await showAlert('Could not save your booking — please try again in a moment. If this keeps happening, contact us.');
       return;
     }
+
+    bookings[id] = myName;
     render();
-    showConfirmScreen(id);
+    // Always confirm — if the overlay fails for any reason, fall back to a plain dialog
+    try {
+      showConfirmScreen(id);
+      const shown = confirmScreen && getComputedStyle(confirmScreen).display !== 'none';
+      if (!shown) throw new Error('overlay did not display');
+    } catch (err) {
+      const d = describeSlot(id);
+      await showAlert("You're booked! " + d.dateFull + ", " + d.timeFull + ". Please add it to your calendar — we'll follow up with details.");
+    }
+  }
+
+  // Shows an immediate "Booking…" state on the tapped ticket
+  function setSlotBusy(id, busy) {
+    const el = grid.querySelector('[data-slot-id="' + id + '"]');
+    if (!el) return;
+    if (busy) {
+      el.dataset.prevHtml = el.innerHTML;
+      el.style.opacity = '0.6';
+      el.style.pointerEvents = 'none';
+      const tag = el.querySelector('.tag');
+      if (tag) tag.textContent = 'Booking…';
+    } else {
+      el.style.opacity = '';
+      el.style.pointerEvents = '';
+      if (el.dataset.prevHtml) el.innerHTML = el.dataset.prevHtml;
+    }
   }
 
   // Build a readable {dateFull, timeFull} for a slot id like '2026-07-27_12'
@@ -1019,7 +1056,7 @@
   }
 
   function mySlotIds() {
-    return Object.keys(bookings).filter(id => bookings[id].toLowerCase() === myName.toLowerCase());
+    return Object.keys(bookings).filter(id => String(bookings[id] || '').toLowerCase() === myName.toLowerCase());
   }
 
   function pad(n) { return String(n).padStart(2, '0'); }
@@ -1149,11 +1186,10 @@
       undoBtn.textContent = 'Booked the wrong time? Undo';
       undoBtn.style.cssText = 'background:none; border:none; color:var(--gold-deep); text-decoration:underline; cursor:pointer; font-family:inherit; font-size:12px;';
       undoBtn.onclick = async () => {
-        await loadBookings();
-        if (bookings[justBookedId] && bookings[justBookedId].toLowerCase() === myName.toLowerCase()) {
+        try {
+          await window.fbdb.ref('bookings/' + justBookedId).remove();
           delete bookings[justBookedId];
-          await saveBookings();
-        }
+        } catch (e) {}
         confirmScreen.style.display = 'none';
         render();
       };
@@ -1167,10 +1203,11 @@
   async function cancelBooking(id) {
     const ok = await showConfirm('Cancel your interview slot?');
     if (!ok) return;
-    await loadBookings();
-    if (bookings[id] && bookings[id].toLowerCase() === myName.toLowerCase()) {
+    try {
+      await window.fbdb.ref('bookings/' + id).remove();
       delete bookings[id];
-      await saveBookings();
+    } catch (e) {
+      await showAlert('Could not cancel just now — please try again in a moment.');
     }
     render();
   }
@@ -1231,7 +1268,8 @@
   function startLiveSync() {
     if (!window.fbdb || pollHandle) return; // no db, or already listening
     pollHandle = window.fbdb.ref('bookings').on('value', (snap) => {
-      bookings = snap.exists() ? (snap.val() || {}) : {};
+      const lv = snap.exists() ? snap.val() : null;
+      bookings = (lv && typeof lv === 'object') ? lv : {};
       // Only re-render the grid if the candidate is currently looking at it
       if (app.style.display !== 'none') render();
     });
@@ -1292,9 +1330,8 @@
     adminBody.querySelectorAll('.clear-btn').forEach(btn => {
       btn.onclick = async () => {
         const id = btn.getAttribute('data-id');
-        await loadBookings();
+        await window.fbdb.ref('bookings/' + id).remove();
         delete bookings[id];
-        await saveBookings();
         renderAdmin();
         render();
       };
