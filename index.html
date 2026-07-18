@@ -764,7 +764,7 @@
         <button id="switch-name">not you?</button>
       </div>
       <div id="grid" class="day-grid"></div>
-      <div class="footer-note"><span class="live-dot"></span>updates automatically — no need to refresh &nbsp;·&nbsp; <span id="version-stamp">v9</span></div>
+      <div class="footer-note"><span class="live-dot"></span>updates automatically — no need to refresh &nbsp;·&nbsp; <span id="version-stamp">v10</span></div>
 
       <div class="cant-make-it">
         <h3>Can't make any of these times?</h3>
@@ -931,9 +931,7 @@
   async function loadBookings() {
     if (!window.fbdb) { bookings = {}; return; }
     try {
-      const readPromise = window.fbdb.ref('bookings').get();
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('read timed out after 8s')), 8000));
-      const snap = await Promise.race([readPromise, timeout]);
+      const snap = await withTimeout(window.fbdb.ref('bookings').get(), 8000);
       const v = snap.exists() ? snap.val() : null;
       bookings = (v && typeof v === 'object') ? v : {};
     } catch (e) {
@@ -982,9 +980,26 @@
     return Object.values(bookings).filter(v => String(v || '').toLowerCase() === myName.toLowerCase()).length;
   }
 
+  // Rejects if a promise takes too long, so a slow connection can never hang the UI
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timed out')), ms))
+    ]);
+  }
+
+  // Always shows a confirmation — overlay first, plain dialog as a guaranteed fallback
+  async function confirmBooking(id) {
+    try {
+      showConfirmScreen(id);
+      if (confirmScreen && getComputedStyle(confirmScreen).display !== 'none') return;
+    } catch (e) { /* fall through */ }
+    const d = describeSlot(id);
+    await showAlert("You're booked! " + d.dateFull + ", " + d.timeFull + ". Please add it to your calendar — we'll follow up with details.");
+  }
+
   async function bookSlot(id, slot) {
     if (!window.fbdb) { await showAlert('Not connected to the database. Please refresh the page.'); return; }
-    // The live listener keeps `bookings` current, so no slow extra read is needed here.
     if (bookings[id]) {
       render();
       await showAlert('Sorry — someone just took that slot. Please pick another.');
@@ -995,54 +1010,19 @@
       return;
     }
 
-    setSlotBusy(id, true);   // immediate "Booking…" feedback
-    try {
-      // Atomically claim just this one slot — only succeeds if it's still empty.
-      const result = await window.fbdb.ref('bookings/' + id).transaction((current) => {
-        if (current === null) return myName;
-        return; // abort: someone else already has it
-      });
-      setSlotBusy(id, false);
-      if (!result.committed) {
-        await loadBookings();
-        render();
-        await showAlert('Sorry — someone just took that slot. Please pick another.');
-        return;
-      }
-    } catch (e) {
-      setSlotBusy(id, false);
-      render();
-      await showAlert('Could not save your booking — please try again in a moment. If this keeps happening, contact us.');
-      return;
-    }
-
+    // Update the screen immediately — never make the candidate wait on the network
     bookings[id] = myName;
     render();
-    // Always confirm — if the overlay fails for any reason, fall back to a plain dialog
-    try {
-      showConfirmScreen(id);
-      const shown = confirmScreen && getComputedStyle(confirmScreen).display !== 'none';
-      if (!shown) throw new Error('overlay did not display');
-    } catch (err) {
-      const d = describeSlot(id);
-      await showAlert("You're booked! " + d.dateFull + ", " + d.timeFull + ". Please add it to your calendar — we'll follow up with details.");
-    }
-  }
+    confirmBooking(id);
 
-  // Shows an immediate "Booking…" state on the tapped ticket
-  function setSlotBusy(id, busy) {
-    const el = grid.querySelector('[data-slot-id="' + id + '"]');
-    if (!el) return;
-    if (busy) {
-      el.dataset.prevHtml = el.innerHTML;
-      el.style.opacity = '0.6';
-      el.style.pointerEvents = 'none';
-      const tag = el.querySelector('.tag');
-      if (tag) tag.textContent = 'Booking…';
-    } else {
-      el.style.opacity = '';
-      el.style.pointerEvents = '';
-      if (el.dataset.prevHtml) el.innerHTML = el.dataset.prevHtml;
+    // Save in the background; undo the change on screen if it fails
+    try {
+      await withTimeout(window.fbdb.ref('bookings/' + id).set(myName), 12000);
+    } catch (e) {
+      delete bookings[id];
+      render();
+      if (confirmScreen) confirmScreen.style.display = 'none';
+      await showAlert('Your booking could not be saved — please check your connection and try again.');
     }
   }
 
@@ -1204,8 +1184,9 @@
     const ok = await showConfirm('Cancel your interview slot?');
     if (!ok) return;
     try {
-      await window.fbdb.ref('bookings/' + id).remove();
       delete bookings[id];
+      render();
+      await withTimeout(window.fbdb.ref('bookings/' + id).remove(), 12000);
     } catch (e) {
       await showAlert('Could not cancel just now — please try again in a moment.');
     }
