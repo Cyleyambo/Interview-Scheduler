@@ -761,10 +761,11 @@
       <div class="status-line">
         <span>Booking as <span class="name-pill" id="name-pill"></span></span>
         <span id="booking-count-line"></span>
+        <span id="save-status" style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;"></span>
         <button id="switch-name">not you?</button>
       </div>
       <div id="grid" class="day-grid"></div>
-      <div class="footer-note"><span class="live-dot"></span>updates automatically — no need to refresh &nbsp;·&nbsp; <span id="version-stamp">v10</span></div>
+      <div class="footer-note"><span class="live-dot"></span>updates automatically — no need to refresh &nbsp;·&nbsp; <span id="version-stamp">v11</span></div>
 
       <div class="cant-make-it">
         <h3>Can't make any of these times?</h3>
@@ -1015,14 +1016,41 @@
     render();
     confirmBooking(id);
 
-    // Save in the background; undo the change on screen if it fails
-    try {
-      await withTimeout(window.fbdb.ref('bookings/' + id).set(myName), 12000);
-    } catch (e) {
-      delete bookings[id];
-      render();
-      if (confirmScreen) confirmScreen.style.display = 'none';
-      await showAlert('Your booking could not be saved — please check your connection and try again.');
+    // Save in the background. Firebase queues and retries slow writes on its own,
+    // so we only undo if it's genuinely rejected (e.g. permission denied).
+    setSaveStatus('saving');
+    window.fbdb.ref('bookings/' + id).set(myName)
+      .then(() => {
+        setSaveStatus('saved');
+      })
+      .catch(async (e) => {
+        setSaveStatus('');
+        delete bookings[id];
+        render();
+        if (confirmScreen) confirmScreen.style.display = 'none';
+        await showAlert('Your booking was rejected by the server and has not been saved. Please try again, or contact us if it keeps happening.');
+      });
+  }
+
+  // Small status pill so a slow connection is visible without blocking anything
+  let saveStatusTimer = null;
+  function setSaveStatus(state) {
+    const el = document.getElementById('save-status');
+    if (!el) return;
+    if (saveStatusTimer) { clearTimeout(saveStatusTimer); saveStatusTimer = null; }
+    if (state === 'saving') {
+      el.textContent = '· saving…';
+      el.style.color = 'var(--ink-soft)';
+      // If it's still going after 20s, reassure rather than alarm
+      saveStatusTimer = setTimeout(() => {
+        el.textContent = '· still saving — keep this page open';
+      }, 20000);
+    } else if (state === 'saved') {
+      el.textContent = '· saved';
+      el.style.color = 'var(--good)';
+      saveStatusTimer = setTimeout(() => { el.textContent = ''; }, 4000);
+    } else {
+      el.textContent = '';
     }
   }
 
@@ -1186,7 +1214,10 @@
     try {
       delete bookings[id];
       render();
-      await withTimeout(window.fbdb.ref('bookings/' + id).remove(), 12000);
+      setSaveStatus('saving');
+      window.fbdb.ref('bookings/' + id).remove()
+        .then(() => setSaveStatus('saved'))
+        .catch(() => setSaveStatus(''));
     } catch (e) {
       await showAlert('Could not cancel just now — please try again in a moment.');
     }
