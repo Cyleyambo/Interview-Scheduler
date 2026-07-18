@@ -423,13 +423,26 @@
 
   /* Booking confirmation screen */
   #confirm-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(10, 44, 87, 0.55);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+    overflow-y: auto;
+  }
+  #confirm-screen .confirm-card {
     max-width: 480px;
-    margin: 30px auto;
+    width: 100%;
+    margin: auto;
     background: var(--paper-raised);
     border: 1px solid var(--stone-line);
     border-radius: 12px;
-    padding: 36px 30px;
+    padding: 32px 26px;
     text-align: center;
+    box-shadow: 0 20px 60px rgba(8, 40, 80, 0.4);
   }
   .confirm-badge {
     width: 64px;
@@ -764,19 +777,6 @@
       <div class="org-link-row"><button id="org-link">Organizer view</button></div>
     </div>
 
-    <div id="confirm-screen" style="display:none;">
-      <div class="confirm-badge">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M20 6 9 17l-5-5"/></svg>
-      </div>
-      <h2>You're booked!</h2>
-      <p class="confirm-name" id="confirm-name"></p>
-      <div class="confirm-slots" id="confirm-slots"></div>
-      <div class="confirm-note">
-        Tap "Add to calendar" on your slot above so you don't miss it — you won't get an automatic reminder. We'll follow up with interview details.
-      </div>
-      <div class="confirm-actions" id="confirm-actions"></div>
-    </div>
-
     <div id="admin-panel" style="display:none;">
       <div class="admin-head">
         <h2>Roster</h2>
@@ -806,6 +806,21 @@
   </div>
   </div>
 </div>
+
+<div id="confirm-screen" style="display:none;">
+      <div class="confirm-card">
+        <div class="confirm-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M20 6 9 17l-5-5"/></svg>
+        </div>
+        <h2>You're booked!</h2>
+        <p class="confirm-name" id="confirm-name"></p>
+        <div class="confirm-slots" id="confirm-slots"></div>
+        <div class="confirm-note">
+          Tap "Add to calendar" on your slot above so you don't miss it — you won't get an automatic reminder. We'll follow up with interview details.
+        </div>
+        <div class="confirm-actions" id="confirm-actions"></div>
+      </div>
+    </div>
 
 <div id="msg-modal" class="modal-overlay" style="display:none;">
   <div class="modal-card">
@@ -921,7 +936,6 @@
       const snap = await Promise.race([readPromise, timeout]);
       bookings = snap.exists() ? (snap.val() || {}) : {};
     } catch (e) {
-      diag('READ FAILED: ' + (e && e.message ? e.message : e));
       bookings = {};
     }
   }
@@ -970,24 +984,9 @@
     return Object.values(bookings).filter(v => v.toLowerCase() === myName.toLowerCase()).length;
   }
 
-  // TEMPORARY DIAGNOSTIC — shows a banner tracing each booking step
-  function diag(msg) {
-    let d = document.getElementById('diag-banner');
-    if (!d) {
-      d = document.createElement('div');
-      d.id = 'diag-banner';
-      d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#0A2C57;color:#fff;padding:8px 12px;font-family:monospace;font-size:12px;text-align:center;';
-      document.body.appendChild(d);
-    }
-    d.textContent = 'DIAG: ' + msg;
-  }
-
   async function bookSlot(id, slot) {
-    diag('tapped ' + id + ' | fbdb=' + (window.fbdb ? 'connected' : 'NULL'));
-    if (!window.fbdb) { await showAlert('Not connected to the database. Refresh the page.'); return; }
-    diag('loading current bookings...');
+    if (!window.fbdb) { await showAlert('Not connected to the database. Please refresh the page.'); return; }
     await loadBookings();
-    diag('loaded. checking slot...');
     if (bookings[id]) {
       render();
       await showAlert('Sorry — someone just took that slot. Please pick another.');
@@ -998,12 +997,9 @@
       return;
     }
     bookings[id] = myName;
-    diag('saving to firebase...');
     try {
       await saveBookings();
-      diag('SAVED OK');
     } catch (e) {
-      diag('SAVE FAILED: ' + (e && e.message ? e.message : e));
       delete bookings[id]; // roll back the local change since the save failed
       render();
       await showAlert('Could not save your booking — please try again in a moment. If this keeps happening, contact us.');
@@ -1129,7 +1125,6 @@
       another.textContent = remaining === 1 ? 'Book one more slot' : 'Book another slot';
       another.onclick = () => {
         confirmScreen.style.display = 'none';
-        app.style.display = 'block';
         render();
       };
       confirmActions.appendChild(another);
@@ -1139,7 +1134,6 @@
     done.textContent = 'Done';
     done.onclick = () => {
       confirmScreen.style.display = 'none';
-      app.style.display = 'block';
       render();
     };
     confirmActions.appendChild(done);
@@ -1161,16 +1155,13 @@
           await saveBookings();
         }
         confirmScreen.style.display = 'none';
-        app.style.display = 'block';
         render();
       };
       undoRow.appendChild(undoBtn);
       confirmActions.parentNode.appendChild(undoRow);
     }
 
-    app.style.display = 'none';
-    confirmScreen.style.display = 'block';
-    if (typeof scrollTo === 'function') { try { scrollTo(0, 0); } catch (e) {} }
+    confirmScreen.style.display = 'flex';
   }
 
   async function cancelBooking(id) {
